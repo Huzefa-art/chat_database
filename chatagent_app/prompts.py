@@ -112,10 +112,9 @@ Example Output:
 """
 
 CONTEXT_PROMPT = """
-You are an ERP Assistant. Answer the question based on history and docs.
+You are an ERP Assistant. Answer the question based on history.
 
 {history_context}
-{rag_context}
 Question: {question}
 
 GREETING RULE:

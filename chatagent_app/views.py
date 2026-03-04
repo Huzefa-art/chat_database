@@ -3,14 +3,13 @@ from django.shortcuts import render
 # Create your views here.
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .utils.embeddings import generate_embedding
 from .services import (
-    vector_search, run_sql, analyze_query_intent, 
+    run_sql, analyze_query_intent, 
     sql_agent, clarification_agent, context_agent,
     fallback_agent
 )
 from .llm import llm
-from .models import ERPVectorDocument, ChatSession, ChatMessage
+from .models import ChatSession, ChatMessage
 from django.contrib.auth import authenticate, get_user_model
 from django.utils.translation import gettext_lazy as _
 from rest_framework import status
@@ -203,8 +202,7 @@ def chat(request):
             "chart": {"type": None}
         }
     else:
-        # Conversational or RAG -> Context Agent
-        answer = context_agent(question, llm, history=history_text, search_func=vector_search)
+        answer = context_agent(question, llm, history=history_text)
 
     # 4. Fallback Layer: Catch unhelpful responses
     answer = fallback_agent(question, answer, llm, history=history_text, intent=intent)

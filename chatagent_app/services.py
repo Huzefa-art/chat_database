@@ -1,8 +1,6 @@
 import re
 import json
 from django.db import connection
-from pgvector.django import L2Distance
-from .models import ERPVectorDocument
 
 from .prompts import ROUTER_PROMPT, SQL_GENERATION_PROMPT, SQL_FORMATTING_PROMPT, CLARIFICATION_PROMPT, CONTEXT_PROMPT
 
@@ -285,21 +283,13 @@ def clarification_agent(question, llm, history=None):
 
     return validate_output({"summary": question_text}, [], intent="clarify")
 
-def context_agent(question, llm, history=None, search_func=None):
+def context_agent(question, llm, history=None):
     """
     Context / Direct Answer Agent: Handles conversational logic and RAG.
     """
     history_context = f"\nChat History:\n{history}\n" if history else ""
     
-    # Optional RAG
     rag_context = ""
-    if search_func:
-        from .utils.embeddings import generate_embedding
-        try:
-            emb = generate_embedding(question)
-            docs = search_func(emb)
-            rag_context = "\nReference Docs:\n" + "\n".join([d.content for d in docs])
-        except: pass
 
     prompt = CONTEXT_PROMPT.format(history_context=history_context, rag_context=rag_context, question=question)
     response_obj = safe_llm_invoke(llm, prompt)
@@ -370,7 +360,3 @@ def fallback_agent(question, answer, llm, history=None, intent=None):
         # If fallback fails, return the original answer
         return answer
 
-def vector_search(query_embedding, top_k=3):
-    return ERPVectorDocument.objects.order_by(
-        L2Distance('embedding', query_embedding)
-    )[:top_k]

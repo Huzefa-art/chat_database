@@ -1,5 +1,4 @@
 from django.db import models
-from pgvector.django import VectorField
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 
@@ -13,17 +12,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
-
-
-class ERPVectorDocument(models.Model):
-    content = models.TextField()
-    source_model = models.CharField(max_length=50)
-    source_id = models.CharField(max_length=50)
-    embedding = VectorField(dimensions=384)
-
-    def __str__(self):
-        return f"{self.source_model} - {self.source_id}"
-    
 
 
 class ChatSession(models.Model):

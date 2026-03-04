@@ -3,15 +3,6 @@ psycopg2-binary==2.9.11
 Django==6.0.2
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
-pgvector==0.4.2
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.4.1
-torchvision==0.19.1
-torchaudio==2.4.1
-sentence-transformers==5.2.3
-
-langchain==1.2.10
-langchain-openai==1.1.9
 django-cors-headers==4.9.0
 langchain-groq==1.1.2
 cryptography==44.0.1
