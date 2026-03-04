@@ -68,3 +68,4 @@ test_monthly_chart.py
 test_rate_limit.py
 test_single_value.py
 scripts/fix_evaluation_sheet.py
+.env
