@@ -1,0 +1,83 @@
+:root {
+  /* Premium Zinc Palette */
+  --primary: #10a37f;
+  --primary-hover: #0e8c6d;
+  --secondary: #71717a;
+  /* Zinc 500 */
+  --accent: #f59e0b;
+
+  --background: #ffffff;
+  --surface: #f4f4f5;
+  /* Zinc 100 */
+  --surface-hover: #e4e4e7;
+  /* Zinc 200 */
+
+  /* Text Colors - High Contrast */
+  --text-primary: #09090b;
+  /* Zinc 950 */
+  --text-secondary: #3f3f46;
+  /* Zinc 700 */
+  --text-muted: #71717a;
+  /* Zinc 500 */
+  --text-on-primary: #ffffff;
+
+  /* Precise Status Colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #0ea5e9;
+
+  /* Refined Spacing & Transitions */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* Layered Shadows for Depth */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-premium: rgba(0, 0, 0, 0.1) 0px 10px 50px;
+
+  /* Borders */
+  --border-light: 1px solid #e4e4e7;
+  --border-subtle: 0.5px solid rgba(0, 0, 0, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  min-height: 100vh;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+#root {
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism Utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-md);
+}
+
+/* Transitions */
+.transition-all {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}

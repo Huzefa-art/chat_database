@@ -1,0 +1,22 @@
+## init django project for first run
+docker compose run django django-admin startproject config .
+
+## create an app in django
+docker compose run django python manage.py startapp chatagent_app
+docker compose run django python manage.py startapp erp_core
+
+## Make migrations
+docker compose run django python manage.py makemigrations erp_core
+docker compose run django python manage.py migrate erp_core
+
+## To Enter postgres inside postgres container
+docker compose exec postgres psql -U erp_user -d erp_db
+
+## Mock data in erp core 
+docker compose run django python manage.py mock_data
+
+## evaluate prompt
+docker compose run django python evaluate_prompt.py
+
+## Enable pgvector EXTENSION
+docker compose exec postgres psql -U erp_user -d erp_db -c "CREATE EXTENSION IF NOT EXISTS vector;"

@@ -1,0 +1,70 @@
+# ------------------------
+# Python
+# ------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache/
+*.mypy_cache/
+*.coverage
+*.tox/
+*.env
+.env.*
+
+node_modules/
+# ------------------------
+# Django
+# ------------------------
+*.log
+media/
+staticfiles/
+*.pot
+*.pyc
+*.pyd
+local_settings.py
+
+*.env
+
+# ------------------------
+# Docker volumes / tmp
+# ------------------------
+volumes/
+tmp/
+*.pid
+
+# ------------------------
+# VSCode / IDEs
+# ------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------
+# OS Files
+# ------------------------
+.DS_Store
+Thumbs.db
+evaluate_prompt.py
+evaluation_comprehensive_results.json
+evaluation_results.json
+verification_results.txt
+verify_clarification.py
+verify_counts.py
+verify_csv.py
+verify_history.py
+scripts/evaluate_agent_comprehensive.py
+scripts/update_prompts.py
+scripts/verify_clarification.py
+investigate_finance.py
+repro_failure.py
+temp_eval.py
+test_fallback_refinement.py
+test_fallback.py
+test_greeting_flow.py
+test_item0001_sql.py
+test_monthly_chart.py
+test_rate_limit.py
+test_single_value.py
+scripts/fix_evaluation_sheet.py
