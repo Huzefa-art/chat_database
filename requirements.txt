@@ -4,5 +4,7 @@ Django==6.0.2
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
-langchain-groq==1.1.2
+langchain-groq
+langgraph
+langchain-community
 cryptography==44.0.1
