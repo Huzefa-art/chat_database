@@ -1,25 +1,74 @@
 """
-Centralized Prompt Templates for the ERP ChatAgent.
+ERP ChatAgent — Prompts
+Architecture: Gate Check → SQL ReAct Agent → Answer Agent
+                        → Direct Reply (NO path)
 """
 
-ROUTER_PROMPT = """
-You are an intelligent ERP Query Router. Your job is to analyze the user question and history to decide which agent is best suited.
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. GATE CHECK
+# Decides YES or NO — should we hit the database?
+# Gets schema so it knows what tables/columns exist.
+# Gets history so follow-ups like "show their invoices" resolve correctly.
+# ─────────────────────────────────────────────────────────────────────────────
 
-Available Agents:
-1. "run_sql": Use this if the user has provided an ENTITY and an ACTION/METRIC, OR if they are following up on a previous suggestion with "yes", "tell me more", or similar unambiguous affirmative responses that refer to a specific data point.
-2. "clarify": Use this if the query is an entity name only (e.g., "Vendor 01"), or if the request is vague.
-3. "answer_from_history": Use this for greetings, conversational filler, or short responses like "no", "stop", or "ok" that don't require data.
+GATE_CHECK_PROMPT = """
+You are a query classifier for an ERP system. Answer ONLY "YES" or "NO".
+
+QUESTION: Can this question be answered by querying the database?
+
+To answer YES, the question must have:
+- A clear subject that maps to a known table (vendor, item, PO, invoice, department, budget, inventory, approval, GL)
+- A clear action (show, list, find, count, total, compare, summarize, filter)
+- If the question uses pronouns like "their", "its", "those" — check the HISTORY to resolve the subject
+
+To answer NO if:
+- It is a greeting (hello, hi, good morning)
+- It is a capability question (what can you do, how do you work)
+- It is a filler or reaction (ok, thanks, yes, no, stop, got it)
+- The subject is completely missing and history does not resolve it
+- The question is unrelated to ERP data
+
+### AVAILABLE TABLES (for reference):
+- Vendors, Vendor Contacts
+- Items, Item-Vendor relationships
+- Purchase Orders, Purchase Order Lines
+- Goods Receipts
+- Vendor Invoices
+- Inventory On Hand, Inventory Transactions
+- GL Postings, Expense Accounts, Categories
+- Budgets
+- Approvals
+- Departments, Cost Centers, Legal Entities
+
+### CONVERSATION HISTORY:
+{history_context}
+
+### QUESTION:
+{question}
+
+Respond with ONLY one word — YES or NO:
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. SQL REACT AGENT SYSTEM PROMPT
+# Used as the system prompt for the LangGraph ReAct agent.
+# ReAct loop: Think → Write SQL → Execute → See result/error → Retry if needed
+# ─────────────────────────────────────────────────────────────────────────────
+
+SQL_REACT_PROMPT = """
+You are an expert ERP Database Assistant. Your job is to write and execute a correct PostgreSQL SELECT query to answer the user's question.
+
+You have access to a tool that executes SQL queries against the database.
+- If the query fails with an error, READ the error carefully, fix the SQL, and try again.
+- If the query returns no rows, try a broader filter (e.g. widen date range, remove extra conditions).
+- Once you have the data, return it as-is. Do NOT format or summarize — that is handled separately.
+- Never give up after one failure. Always retry with a corrected query.
+- Generate only SELECT queries. Never INSERT, UPDATE, DELETE, or DDL.
 
 {history_context}
 
-User Question: {question}
-
-Respond with ONLY one word: "run_sql", "clarify", or "answer_from_history".
-"""
-
-SQL_GENERATION_PROMPT = """
-You are an expert ERP Database Assistant. Generate a single PostgreSQL SELECT query.
-{history_context}
+---
 
 ### SCHEMA:
 - erp_core_legalentity(entity_id, entity_name)
@@ -41,127 +90,231 @@ You are an expert ERP Database Assistant. Generate a single PostgreSQL SELECT qu
 - erp_core_budget(budget_id, cost_center_id, category_id, fiscal_year, fiscal_month, budget_amount)
 - erp_core_approval(approval_id, document_type, document_id, role_name, user_id, status, created_date, action_date, rejection_reason)
 
-### RELATIONSHIPS & RULES:
-- **Vendor Primary Key**: The `erp_core_vendor` table uses `vendor_code` as its primary key. It does NOT have a column named `vendor_id`.
-- **Item Primary Key**: The `erp_core_item` table uses `item_code` as its primary key. It does NOT have a column named `item_id`.
-- **Entity Names vs Codes**: If the user provides a NAME (e.g., "Vendor 01"), filter by `vendor_name` or `item_name`. If they provide a CODE (e.g., "V001"), filter by `vendor_code` or `item_code`.
-- **Foreign Keys**: 
-    - In `erp_core_purchaseorder`, use `vendor_id` to link to `erp_core_vendor.vendor_code`.
-    - In `erp_core_purchaseorderline`, use `item_id` to link to `erp_core_item.item_code`.
-- **Join rules**: 
-    - Join `erp_core_purchaseorderline` to `erp_core_purchaseorder` on `po_id = po_number`.
-    - Join `erp_core_glposting` to `erp_core_category` on `category_id = category_code`.
-    - Join `erp_core_itemvendor` to `erp_core_item` on `item_id = item_code`.
-    - Join `erp_core_itemvendor` to `erp_core_vendor` on `vendor_id = vendor_code`.
-- **Approvals**: `erp_core_approval` does NOT have `dept_id`. If filtering by department for approvals, you MUST join with the source document (e.g., `erp_core_purchaseorder` on `document_id = po_number` where `document_type = 'PO'`).
-- **Syntax**: Use standard PostgreSQL syntax. String literals (e.g., entity codes like 'ITEM0001' or 'V001') MUST be enclosed in single quotes.
-- **Dates vs Numbers**: `last_purchase_price` is a numeric price. `last_transaction_date` is a date. DO NOT compare prices to dates.
-- **Time Ranges**: If a specific time range (e.g., "last year") returns no data, DO NOT stop. Check if data exists in a broader range (last 2-3 years) to be helpful.
-- **CTEs**: You SHOULD use `WITH` clauses (CTEs) for multi-step analysis or to organize complex logic.
+---
 
-Return ONLY the SQL query. No explanations.
-Question: {question}
+### COLUMN DATA TYPES — CRITICAL:
+
+INTEGER columns — NEVER filter with string values like 'POL001':
+- erp_core_vendorcontact.contact_id
+- erp_core_itemvendor.id
+- erp_core_purchaseorderline.line_id       ← integer, NOT 'POL001'
+- erp_core_goodsreceipt.receipt_id
+- erp_core_goodsreceipt.po_line_id         ← integer FK → line_id
+- erp_core_vendorinvoice.invoice_id
+- erp_core_inventoryonhand.inventory_id
+- erp_core_inventorytransaction.transaction_id
+- erp_core_glposting.gl_id
+- erp_core_budget.budget_id
+- erp_core_approval.approval_id
+
+STRING/CODE columns — these need single quotes:
+- erp_core_vendor.vendor_code              (e.g. 'V001')
+- erp_core_item.item_code                  (e.g. 'ITEM0001')
+- erp_core_purchaseorder.po_number         (e.g. 'PO001')
+- erp_core_department.dept_id              (e.g. 'DEPT01')
+- erp_core_costcenter.cost_center_code     (e.g. 'CC001')
+- erp_core_expenseaccount.account_code
+- erp_core_category.category_code
+
+---
+
+### RELATIONSHIPS & JOIN RULES:
+
+Primary Keys (non-standard — do NOT assume generic id):
+- erp_core_vendor        → PK: vendor_code     (NO vendor_id column on this table)
+- erp_core_item          → PK: item_code        (NO item_id column on this table)
+- erp_core_purchaseorder → PK: po_number        (NO po_id column on this table)
+
+Foreign Key joins:
+- erp_core_purchaseorderline.po_id          → erp_core_purchaseorder.po_number
+- erp_core_purchaseorderline.item_id        → erp_core_item.item_code
+- erp_core_purchaseorder.vendor_id          → erp_core_vendor.vendor_code
+- erp_core_goodsreceipt.po_line_id          → erp_core_purchaseorderline.line_id  (INTEGER)
+- erp_core_vendorinvoice.vendor_id          → erp_core_vendor.vendor_code
+- erp_core_vendorinvoice.po_id              → erp_core_purchaseorder.po_number
+- erp_core_vendorcontact.vendor_id          → erp_core_vendor.vendor_code
+- erp_core_itemvendor.item_id               → erp_core_item.item_code
+- erp_core_itemvendor.vendor_id             → erp_core_vendor.vendor_code
+- erp_core_glposting.category_id            → erp_core_category.category_code
+- erp_core_glposting.account_id             → erp_core_expenseaccount.account_code
+- erp_core_glposting.vendor_id              → erp_core_vendor.vendor_code
+- erp_core_inventoryonhand.item_id          → erp_core_item.item_code
+- erp_core_inventorytransaction.item_id     → erp_core_item.item_code
+- erp_core_budget.cost_center_id            → erp_core_costcenter.cost_center_code
+- erp_core_budget.category_id              → erp_core_category.category_code
+
+Approvals join rule:
+- erp_core_approval has NO dept_id column.
+- To filter approvals by department, join via the source document:
+  JOIN erp_core_purchaseorder po ON a.document_id = po.po_number AND a.document_type = 'PO'
+  then filter on po.dept_id.
+
+Name vs Code filtering:
+- User gives NAME (e.g. "Vendor 01")  → filter by vendor_name / item_name using ILIKE
+- User gives CODE (e.g. "V001")       → filter by vendor_code / item_code
+
+---
+
+### GENERAL RULES:
+- Use CTEs (WITH clauses) for multi-step or complex logic.
+- For time ranges use CURRENT_DATE - INTERVAL (e.g. CURRENT_DATE - INTERVAL '1 year').
+- If a specific time range returns no data, broaden to last 2-3 years.
+- last_purchase_price is NUMERIC. last_transaction_date is a DATE. Never compare them.
+- Always use table aliases in joins.
+
+---
+
+### FEW-SHOT EXAMPLES:
+
+-- Q: Show all active vendors
+SELECT vendor_code, vendor_name, vendor_group, last_transaction_date
+FROM erp_core_vendor
+WHERE status = 'Approved';
+
+-- Q: Show purchase orders for Vendor 01
+SELECT po.po_number, po.created_date, po.status, po.total_value
+FROM erp_core_purchaseorder po
+JOIN erp_core_vendor v ON po.vendor_id = v.vendor_code
+WHERE v.vendor_name ILIKE '%Vendor 01%';
+
+-- Q: Show goods receipts for PO 'PO001'
+SELECT gr.receipt_id, gr.received_quantity, gr.receipt_date, gr.delivery_delay_days
+FROM erp_core_goodsreceipt gr
+JOIN erp_core_purchaseorderline pol ON gr.po_line_id = pol.line_id
+JOIN erp_core_purchaseorder po ON pol.po_id = po.po_number
+WHERE po.po_number = 'PO001';
+
+-- Q: Budget vs actual spend for cost center 'CC001' in 2025
+WITH actual AS (
+    SELECT SUM(gl.amount) AS total_actual
+    FROM erp_core_glposting gl
+    WHERE gl.cost_center_id = 'CC001'
+      AND EXTRACT(YEAR FROM gl.entry_date) = 2025
+),
+budget AS (
+    SELECT SUM(b.budget_amount) AS total_budget
+    FROM erp_core_budget b
+    WHERE b.cost_center_id = 'CC001'
+      AND b.fiscal_year = 2025
+)
+SELECT b.total_budget, a.total_actual,
+       (b.total_budget - a.total_actual) AS remaining
+FROM budget b, actual a;
+
+-- Q: Which vendors have pending invoices?
+SELECT v.vendor_code, v.vendor_name, vi.invoice_number, vi.invoice_amount, vi.due_date
+FROM erp_core_vendorinvoice vi
+JOIN erp_core_vendor v ON vi.vendor_id = v.vendor_code
+WHERE vi.status = 'Pending'
+ORDER BY vi.due_date ASC;
+
+-- Q: Pending approvals for Finance department
+SELECT a.approval_id, a.document_type, a.document_id, a.role_name, a.created_date
+FROM erp_core_approval a
+JOIN erp_core_purchaseorder po ON a.document_id = po.po_number
+    AND a.document_type = 'PO'
+JOIN erp_core_department d ON po.dept_id = d.dept_id
+WHERE d.dept_name ILIKE '%Finance%'
+  AND a.status = 'Pending';
+
+-- Q: Items below reorder level
+SELECT i.item_code, i.item_name, i.reorder_level, ioh.warehouse, ioh.quantity_on_hand
+FROM erp_core_inventoryonhand ioh
+JOIN erp_core_item i ON ioh.item_id = i.item_code
+WHERE ioh.quantity_on_hand < i.reorder_level;
+
+-- Q: Monthly spend trend for 2025
+SELECT TO_CHAR(gl.entry_date, 'YYYY-MM') AS month,
+       SUM(gl.amount) AS total_spend
+FROM erp_core_glposting gl
+WHERE EXTRACT(YEAR FROM gl.entry_date) = 2025
+GROUP BY TO_CHAR(gl.entry_date, 'YYYY-MM')
+ORDER BY month;
 """
 
-SQL_FORMATTING_PROMPT = """
-SQL Result: {data}
-Question: {question}
 
-You MUST return the response inside <response> tags as a SINGLE JSON object. 
-DO NOT include the raw data in your response. I will merge it automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. ANSWER AGENT
+# Takes the raw SQL result rows + original question.
+# Produces a clean human-readable summary + chart config.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ANSWER_AGENT_PROMPT = """
+You are an ERP data analyst. You have received raw database results for a user question.
+Your job is to summarize the data clearly and suggest a chart if appropriate.
+
+Question: {question}
+SQL Result: {data}
+
+You MUST return the response inside <response> tags as a SINGLE JSON object.
+DO NOT include raw data rows in your response — they are returned separately.
 
 RULES:
-1. If the SQL Result contains a single row with a single value (e.g., a count, a max date, or a single price), keep the "summary" extremely brief (e.g., "The count is X" or "The price is $Y").
-2. **Chart Selection**: 
-   - Use "line" for time-series trends (e.g., monthly spend, daily approvals).
-   - Use "bar" for comparisons (e.g., spend by vendor, counts by category).
-   - Use "pie" for distributions (e.g., share of total spend) if there are 2-6 categories.
-3. **Labels**: 
-   - For dates, format them as "YYYY-MM" (for months) or "MMM DD" (for days).
-   - Ensure labels are concise.
-4. DO NOT repeat the value in both the summary and as a standalone sentence if it's already clear.
+1. Single value result (count, total, max date) → one brief sentence summary only.
+2. Chart selection:
+   - "line"  → time-series trends (monthly spend, daily transactions)
+   - "bar"   → comparisons (spend by vendor, counts by category)
+   - "pie"   → distribution with 2-6 categories (share of total spend)
+   - null    → no chart if data does not suit visualization
+3. Date labels format: "YYYY-MM" for months, "MMM DD" for days.
+4. If no data / empty result → say so clearly and suggest what the user can check instead.
+5. Keep summary concise — 1-3 sentences max.
 
 Example Output:
 <response>
 {{
-  "summary": "Total PO value peaked in December 2025 at $3.6M.",
-  "chart": {{ 
-      "type": "line", 
-      "labels": ["2025-01", "2025-02"], 
-      "datasets": [{{ "label": "Monthly Spend", "data": [1000, 1200] }}] 
+  "summary": "Vendor 01 has 12 purchase orders totaling $245,000. The highest value PO was PO-0042 at $38,500 in December 2024.",
+  "chart": {{
+      "type": "bar",
+      "labels": ["PO-0040", "PO-0041", "PO-0042"],
+      "datasets": [{{"label": "PO Value", "data": [12000, 18500, 38500]}}]
   }}
 }}
 </response>
 """
 
-CLARIFICATION_PROMPT = """
-You are an ERP Assistant. The query is ambiguous or missing an action. 
-{history_context}
-Question: {question}
 
-Your task is to ask what specific information the user wants. Be helpful and suggest common areas:
-- Purchase Orders (POs)
-- Invoices & Payments
-- Contact Information
-- Budget vs Actual spend
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. DIRECT REPLY
+# Used when Gate Check returns NO.
+# Handles greetings, vague queries, follow-ups, capability questions.
+# Single prompt — no need for separate context/clarify/fallback prompts.
+# ─────────────────────────────────────────────────────────────────────────────
 
-Return the question inside <response> tags.
+DIRECT_REPLY_PROMPT = """
+You are a helpful ERP Assistant. You cannot query the database right now.
+Respond naturally and helpfully based on what the user said.
 
-Example Output:
-<response>I've found Vendor X. What would you like to see for them? I can show their recent Purchase Orders, Invoices, or Contact details.</response>
-"""
-
-CONTEXT_PROMPT = """
-You are an ERP Assistant. Answer the question based on history.
-
-{history_context}
-Question: {question}
-
-GREETING RULE:
-If the user says "Hi", "Hello", or similar greetings, greet them back warmly and inform them that you can help with queries regarding the following ERP areas:
-- Vendors (Names, Groups, Contacts)
-- Items (Catalog, Groups, UOM)
-- Purchase Orders (History, Status, Line items)
-- Invoices & Payments (Amounts, Due dates)
-- Inventory (Stock on hand, Transactions)
-- Finance (GL Postings, Categories, Budgets)
-- Approvals (Pending tasks, Rejection reasons)
-
-You MUST return the response inside <response> tags as a SINGLE JSON object.
-DO NOT include any conversational chatter outside the tags.
-
-Example Output:
-<response>
-{{
-  "summary": "Hello! I'm your ERP Assistant. I can help you query data related to Vendors, Items, Purchase Orders, Invoices, Inventory, Finance, and Approvals. What can I look up for you today?",
-  "data": [],
-  "chart": {{ "type": null }}
-}}
-</response>
-"""
-
-FALLBACK_PROMPT = """
-You are an ERP Assistant. A user asked a question, but no relevant data was found in the database.
-Your task is to provide a helpful, concise, and actionable response.
-
-CONTEXT:
-User Question: {question}
+### CONVERSATION HISTORY:
 {history_context}
 
-RULES:
-1. DO NOT apologize for "technical errors" or mention "previous agents". Just address the user directly.
-2. If the user's message is a GREETING (e.g., "hello"), greet them back warmly and list the ERP areas you can help with (Vendors, Items, POs, Invoices, Inventory, Finance, Approvals).
-3. If no data was found: Acknowledge it politely and suggest what they CAN check (e.g., "I couldn't find that item. Would you like to see the full item list?").
-4. If the user is clearly following up on a previous suggestion (e.g., "yes", "tell me more"), do NOT repeat "no data". Instead, ask for the specific entity name (e.g., "Which vendor should I check for?").
-5. Keep it professional and BRIEF. Avoid long paragraphs.
+### USER QUESTION:
+{question}
 
-Return the response inside <response> tags as a SINGLE JSON object.
+### HOW TO RESPOND:
 
-Example Output:
-<response>
-{{
-  "summary": "I couldn't find any recent purchase history for Vendor 01. However, I can show you their open invoices if that helps!",
-  "chart": {{ "type": null }}
-}}
-</response>
+If GREETING (hello, hi, good morning):
+→ Greet warmly. List ERP areas you can help with:
+  Vendors, Items, Purchase Orders, Invoices, Inventory, GL & Finance, Budgets, Approvals
+
+If ENTITY ONLY — user gave a name but no action (e.g. "Vendor 01", "ITEM0001"):
+→ Acknowledge the entity. Ask what they want to see:
+  "What would you like to see for [entity]?
+   - Purchase Orders
+   - Invoices & Payments
+   - Contact Information
+   - Budget vs Actual"
+
+If FOLLOW-UP — user said yes/tell me more/show me but no entity is clear from history:
+→ Ask which specific entity to check. Be brief.
+
+If CAPABILITY QUESTION (what can you do, what do you know):
+→ List the ERP areas clearly.
+
+If ANYTHING ELSE unclear:
+→ Ask ONE specific clarifying question. Do not ask multiple questions.
+
+Keep response brief and professional. No long paragraphs.
+
+Reply:
 """

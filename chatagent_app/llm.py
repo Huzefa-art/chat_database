@@ -14,7 +14,7 @@ if provider == "groq":
 
     llm = ChatGroq(
         groq_api_key=api_key,
-        model_name=os.getenv("GROQ_MODEL", "llama3-8b-8192"),
+        model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         temperature=0
     )
 
