@@ -84,11 +84,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv("POSTGRES_DB"),
-        'USER': os.getenv("POSTGRES_USER"),
-        'PASSWORD': os.getenv("POSTGRES_PASSWORD"),
-        'HOST': os.getenv("DB_HOST"),  
-        'PORT': os.getenv("DB_PORT"),
+        'NAME': 'postgres',
+        'USER': 'postgres.viioxbaujqnxwkttjuzo',
+        'PASSWORD': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpaW94YmF1anFueHdrdHRqdXpvIiwicm9sZSI6InBvc3RnZXMiLCJpYXQiOjE3NzUwNTE0ODQsImV4cCI6MjA5MDYyNzQ4NH0.LDRbRWv8JRu6fJ5e3j3uJAKj9DgKsLQgZo0d8NxJWGQ',
+        'HOST': 'aws-0-us-east-1.pooler.supabase.com',
+        'PORT': '6543',
+        'ATOMIC_REQUESTS': True,
     }
 }
 
