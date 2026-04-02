@@ -165,7 +165,7 @@ function ChatInterface() {
         await fetchSessions(); // Refresh list to show new chat
       }
 
-      const erpResponse = await queryERPData(content, chatId);
+      const erpResponse = await queryERPData(content, chatId!);
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
