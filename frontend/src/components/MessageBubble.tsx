@@ -29,11 +29,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       </div>
       <div className="message-body">
         <div className="message-sender-name">{isUser ? 'You' : 'Assistant'}</div>
-        <div className="message-text">{message.content}</div>
+
+        {/* If it's a bot message with an erpResponse, the summary is handled below. Otherwise show content. */}
+        {(!message.erpResponse) && <div className="message-text">{message.content}</div>}
 
         {message.erpResponse && (
           <div className="erp-response-area">
-            <div className="response-summary-text">{message.erpResponse.summary}</div>
+            <div className="response-summary-text">{message.erpResponse.summary || message.content}</div>
             {message.erpResponse.data.length > 0 && (
               <ChartDisplay erpResponse={message.erpResponse} />
             )}
