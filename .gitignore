@@ -10,7 +10,6 @@ __pycache__/
 *.coverage
 *.tox/
 *.env
-.env.*
 
 node_modules/
 # ------------------------
@@ -68,3 +67,4 @@ test_monthly_chart.py
 test_rate_limit.py
 test_single_value.py
 scripts/fix_evaluation_sheet.py
+config.bat
