@@ -1,27 +1,15 @@
 {
-  "name": "erp-analytics-chatbot",
+  "name": "erp-analytics-chatbot-root",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "install:all": "npm install && cd frontend && npm install",
-    "dev": "cd frontend && npm run dev",
-    "build": "npm run install:all && cd frontend && npm run build",
-    "preview": "cd frontend && npm run preview",
-    "start": "cd frontend && npm run preview"
-  },
-  "dependencies": {
-    "chart.js": "^4.4.0",
-    "react": "^18.2.0",
-    "react-chartjs-2": "^5.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^7.13.0"
+    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "install:all": "npm install && npm install -w frontend && npm install -w backend"
   },
   "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.8"
+    "concurrently": "^8.2.2"
   }
 }
