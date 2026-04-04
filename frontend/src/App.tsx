@@ -23,6 +23,7 @@ function ChatInterface() {
   });
   const [chatSessions, setChatSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -48,6 +49,7 @@ function ChatInterface() {
 
   useEffect(() => {
     if (currentChatId) {
+      setIsSidebarOpen(false); // Close on mobile when chat selected
       const fetchHistory = async () => {
         try {
           setIsLoading(true);
@@ -192,7 +194,8 @@ function ChatInterface() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+      <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>
       <aside className="sidebar">
         <div className="sidebar-header">
           <button className="new-chat-btn" onClick={handleNewChatClick}>
@@ -258,6 +261,13 @@ function ChatInterface() {
 
       <main className="main-content">
         <header className="chat-header">
+          <button className="menu-toggle" onClick={() => setIsSidebarOpen(true)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
           <div className="header-info">
             <h1 className="header-title">ERP Assistant</h1>
             <span className="model-badge">v2.0</span>
